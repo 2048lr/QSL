@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QSL卡管理系统 | BG7OFU</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义主题 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#36CFC9',
+                        accent: '#FF7D00',
+                        pending: '#FFAB00',
+                        sent: '#00B42A',
+                        online: '#722ED1'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .hover-lift {
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+            .hover-lift:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.15);
+            }
+            .bg-blur {
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+            }
+            .status-badge {
+                @apply inline-block px-2 py-1 text-xs font-semibold rounded-full;
+            }
+            .eye-qso-badge {
+                @apply inline-block px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-full;
+            }
+            .loading-spinner {
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .fade-in {
+                animation: fadeIn 0.5s ease-in-out;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            .debug-panel {
+                @apply fixed bottom-0 left-0 right-0 bg-black/90 text-white p-4 z-50 max-h-64 overflow-y-auto transition-all duration-300 transform translate-y-full;
+            }
+            .debug-panel.active {
+                @apply translate-y-0;
+            }
+        }
+    </style>
+</head>
+<body class="font-sans min-h-screen relative">
+    <!-- 调试面板 -->
+    <div id="debugPanel" class="debug-panel">
+        <div class="flex justify-between items-center mb-2">
+            <h3 class="font-bold">调试信息</h3>
+            <button id="closeDebugBtn" class="text-gray-300 hover:text-white">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+        <div id="debugLogs" class="text-sm space-y-1"></div>
+    </div>
+    
+    <!-- 显示/隐藏调试面板按钮 -->
+    <button id="toggleDebugBtn" class="fixed bottom-4 left-4 bg-primary/80 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-lg z-40">
+        <i class="fa fa-bug"></i>
+    </button>
+
+    <!-- 全局背景图 -->
+    <div class="fixed inset-0 z-0">
+        <img src="https://qsl.dcfgju.com/images/image.jpg" alt="无线电通信背景图" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-black/40"></div>
+    </div>
+
+    <!-- 导航栏 -->
+    <header id="navbar" class="fixed w-full top-0 z-50 transition-all duration-300 bg-white/90 bg-blur shadow-sm">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-radio text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-primary">QSL系统</h1>
+            </div>
+            
+            <!-- 桌面导航 -->
+            <nav class="hidden md:flex items-center space-x-8">
+                <a href="#dashboard" class="font-medium hover:text-primary transition-colors">仪表盘</a>
+                <a href="#send" class="font-medium hover:text-primary transition-colors">发送QSL</a>
+                <a href="#record-receive" class="font-medium hover:text-primary transition-colors">登记接收</a>
+                <a href="#received" class="font-medium hover:text-primary transition-colors">已接收</a>
+                <a href="#sent" class="font-medium hover:text-primary transition-colors">已发送</a>
+            </nav>
+            
+            <!-- 用户信息 -->
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:flex items-center space-x-2">
+                    <span class="font-medium">BG7OFU</span>
+                    <img src="https://qsl.dcfgju.com/avatars/touxiang.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-primary">
+                </div>
+                
+                <!-- 移动端菜单按钮 -->
+                <button id="menuBtn" class="md:hidden text-dark hover:text-primary">
+                    <i class="fa fa-bars text-xl"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 移动端导航菜单 -->
+        <div id="mobileMenu" class="md:hidden hidden bg-white border-t">
+            <div class="container mx-auto px-4 py-3 flex flex-col space-y-3">
+                <a href="#dashboard" class="py-2 font-medium hover:text-primary transition-colors">仪表盘</a>
+                <a href="#send" class="py-2 font-medium hover:text-primary transition-colors">发送QSL</a>
+                <a href="#record-receive" class="py-2 font-medium hover hover:text-primary transition-colors">登记接收</a>
+                <a href="#received" class="py-2 font-medium hover:text-primary transition-colors">已接收</a>
+                <a href="#sent" class="py-2 font-medium hover hover:text-primary transition-colors">已发送</a>
+                <div class="pt-2 flex items-center space-x-2 border-t">
+                    <span class="font-medium">BG7OFU</span>
+                    <img src="https://qsl.dcfgju.com/avatars/touxiang.png" alt="用户头像" class="w-8 h-8 rounded-full object-cover border-2 border-primary">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="container mx-auto pb-16 relative z-10 pt-20">
+        <!-- 英雄区域 -->
+        <section class="relative bg-gradient-to-br from-primary/90 to-primary py-16 md:py-24 text-white overflow-hidden rounded-2xl mb-12 mx-4">
+            <div class="absolute inset-0 opacity-10">
+                <div class="absolute top-0 left-0 w-full h-full bg-[url('https://qsl.dcfgju.com/images/image.jpg')] bg-cover bg-center"></div>
+            </div>
+            <div class="container mx-auto px-4 relative z-10">
+                <div class="max-w-3xl">
+                    <h1 class="text-[clamp(2rem,5vw,3.5rem)] font-bold leading-tight mb-4">
+                        QSL卡管理系统
+                    </h1>
+                    <p class="text-lg md:text-white/90 mb-8 max-w-xl">
+                        轻松管理您的业余无线电通信QSL卡片，记录每一次通联（包括面对面通联），完整记录收发卡片信息。
+                    </p>
+                    <div class="flex flex-wrap gap-4">
+                        <a href="#send" class="bg-white text-primary px-6 py-3 rounded-lg font-medium hover:bg-opacity-90 transition-all shadow-lg hover:shadow-xl">
+                            发送新QSL卡
+                        </a>
+                        <a href="#record-receive" class="bg-accent/20 backdrop-blur-sm border border-white/30 text-white px-6 py-3 rounded-lg font-medium hover:bg-accent/30 transition-all">
+                            记录接收卡片
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 仪表盘区域 -->
+        <section id="dashboard" class="py-12 px-4">
+            <div class="container mx-auto">
+                <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold mb-8 text-center text-white">仪表盘</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                    <!-- 统计卡片 1 - 已接收卡片 -->
+        <div class="bg-white/90 bg-blur rounded-xl p-6 shadow-md hover-lift">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-gray-600 font-medium">已接收卡片</h3>
+                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <i class="fa fa-inbox text-primary"></i>
+                </div>
+            </div>
+            <p class="text-3xl font-bold mb-2" id="receivedCount">
+                <i class="fa fa-circle-o-notch fa-spin loading-spinner"></i>
+            </p>
+            <p class="text-green-500 text-sm flex items-center" id="receivedGrowth">
+                <i class="fa fa-arrow-up mr-1"></i> 加载中...
+            </p>
+        </div>
+                    
+                    <!-- 统计卡片 2 - 已发送卡片 -->
+                    <div class="bg-white/90 bg-blur rounded-xl p-6 shadow-md hover-lift">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-600 font-medium">已发送卡片</h3>
+                            <div class="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                                <i class="fa fa-paper-plane text-accent"></i>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold mb-2" id="sentCount">
+                            <i class="fa fa-circle-o-notch fa-spin loading-spinner"></i>
+                        </p>
+                        <p class="text-green-500 text-sm flex items-center" id="sentGrowth">
+                            <i class="fa fa-arrow-up mr-1"></i> 加载中...
+                        </p>
+                    </div>
+                    
+                    <!-- 统计卡片 3 - 待寄出卡片 -->
+                    <div class="bg-white/90 bg-blur rounded-xl p-6 shadow-md hover-lift">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-600 font-medium">待寄出卡片</h3>
+                            <div class="w-10 h-10 rounded-full bg-pending/10 flex items-center justify-center">
+                                <i class="fa fa-clock-o text-pending"></i>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold mb-2" id="pendingCount">
+                            <i class="fa fa-circle-o-notch fa-spin loading-spinner"></i>
+                        </p>
+                        <p class="text-green-500 text-sm flex items-center" id="pendingGrowth">
+                            <i class="fa fa-arrow-up mr-1"></i> 加载中...
+                        </p>
+                    </div>
+                    
+                    <!-- 统计卡片 4 - 在线换卡 -->
+                    <div class="bg-white/90 bg-blur rounded-xl p-6 shadow-md hover-lift">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-gray-600 font-medium">在线换卡</h3>
+                            <div class="w-10 h-10 rounded-full bg-online/10 flex items-center justify-center">
+                                <i class="fa fa-exchange text-online"></i>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold mb-2" id="onlineCount">
+                            <i class="fa fa-circle-o-notch fa-spin loading-spinner"></i>
+                        </p>
+                        <p class="text-green-500 text-sm flex items-center" id="onlineGrowth">
+                            <i class="fa fa-arrow-up mr-1"></i> 加载中...
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- 图表区域 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white/90 bg-blur rounded-xl p-6 shadow-md">
+                        <h3 class="text-lg font-semibold mb-4">月度卡片统计</h3>
+                        <div class="h-80 flex items-center justify-center" id="monthlyChartContainer">
+                            <i class="fa fa-circle-o-notch fa-spin text-3xl text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 发送QSL卡区域 -->
+        <section id="send" class="py-12 px-4">
+            <div class="container mx-auto">
+                <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold mb-8 text-center text-white">发送新QSL卡</h2>
+                
+                <div class="max-w-3xl mx-auto bg-white/90 bg-blur rounded-xl shadow-xl shadow-lg">
+                    <form id="sendQslForm" class="space-y-6 p-6 md:p-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="sendCallSign" class="block text-sm font-medium text-gray-700 mb-1">对方呼号 <span class="text-red-500">*</span></label>
+                                <input type="text" id="sendCallSign" name="callSign" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="sendMyCallSign" class="block text-sm font-medium text-gray-700 mb-1">我的呼号 <span class="text-red-500">*</span></label>
+                                <input type="text" id="sendMyCallSign" name="myCallSign" value="BG7OFU" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="sendDate" class="block text-sm font-medium text-gray-700 mb-1">通联日期 <span class="text-red-500">*</span></label>
+                                <input type="date" id="sendDate" name="date" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="sendTime" class="block text-sm font-medium text-gray-700 mb-1">通联时间 (UTC) <span class="text-red-500">*</span></label>
+                                <input type="time" id="sendTime" name="time" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="sendFrequency" class="block text-sm font-medium text-gray-700 mb-1">频率 (MHz)</label>
+                                <input type="number" step="0.001" id="sendFrequency" name="frequency"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                <p class="text-xs text-gray-500 mt-1">EYE QSO可留空</p>
+                            </div>
+                            
+                            <div>
+                                <label for="sendMode" class="block text-sm font-medium text-gray-700 mb-1">模式 <span class="text-red-500">*</span></label>
+                                <select id="sendMode" name="mode" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                    <option value="">请选择模式</option>
+                                    <option value="SSB">SSB</option>
+                                    <option value="CW">CW</option>
+                                    <option value="FM">FM</option>
+                                    <option value="AM">AM</option>
+                                    <option value="EYE">EYE QSO</option>
+                                </select>
+                            </div>
+
+                            <!-- 卡片类型选择 -->
+                            <div>
+                                <label for="cardType" class="block text-sm font-medium text-gray-700 mb-1">卡片类型 <span class="text-red-500">*</span></label>
+                                <select id="cardType" name="cardType" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                    <option value="">请选择类型</option>
+                                    <option value="online">在线换卡</option>
+                                    <option value="physical">线下下实体卡</option>
+                                </select>
+                            </div>
+
+
+                        </div>
+
+                        <!-- 实体卡备注信息 -->
+                        <div id="physicalCardNotesContainer" class="hidden">
+                            <label for="physicalCardNotes" class="block text-sm font-medium text-gray-700 mb-1">实体卡备注（可选）</label>
+                            <textarea id="physicalCardNotes" name="physicalCardNotes" rows="2"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                                placeholder="可记录卡片是否已准备好、是否需要贴邮票等信息..."></textarea>
+                        </div>
+                        
+                        <div class="pt-4">
+                            <button type="submit" class="w-full bg-primary hover:bg-primary/90 text-white font-medium py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center justify-center">
+                                <i class="fa fa-paper-plane mr-2"></i> 提交发送QSL卡信息
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 登记接收QSL卡区域 -->
+        <section id="record-receive" class="py-12 px-4">
+            <div class="container mx-auto">
+                <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold mb-8 text-center text-white">登记接收QSL卡</h2>
+                
+                <div class="max-w-3xl mx-auto bg-white/90 bg-blur rounded-xl shadow-xl shadow-lg">
+                    <form id="receiveQslForm" class="space-y-6 p-6 md:p-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="receiveCallSign" class="block text-sm font-medium text-gray-700 mb-1">对方呼号 <span class="text-red-500">*</span></label>
+                                <input type="text" id="receiveCallSign" name="callSign" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="receiveMyCallSign" class="block text-sm font-medium text-gray-700 mb-1">我的呼号 <span class="text-red-500">*</span></label>
+                                <input type="text" id="receiveMyCallSign" name="myCallSign" value="BG7OFU" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="receiveDate" class="block text-sm font-medium text-gray-700 mb-1">通联日期 <span class="text-red-500">*</span></label>
+                                <input type="date" id="receiveDate" name="date" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="receiveTime" class="block text-sm font-medium text-gray-700 mb-1">通联时间 (UTC) <span class="text-red-500">*</span></label>
+                                <input type="time" id="receiveTime" name="time" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                            </div>
+                            
+                            <div>
+                                <label for="receiveFrequency" class="block text-sm font-medium text-gray-700 mb-1">频率 (MHz)</label>
+                                <input type="number" step="0.001" id="receiveFrequency" name="frequency"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                <p class="text-xs text-gray-500 mt-1">EYE QSO可留空</p>
+                            </div>
+                            
+                            <div>
+                                <label for="receiveMode" class="block text-sm font-medium text-gray-700 mb-1">模式 <span class="text-red-500">*</span></label>
+                                <select id="receiveMode" name="mode" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                    <option value="">请选择模式</option>
+                                    <option value="SSB">SSB</option>
+                                    <option value="CW">CW</option>
+                                    <option value="FM">FM</option>
+                                    <option value="AM">AM</option>
+                                    <option value="EYE">EYE QSO</option>
+                                </select>
+                            </div>
+
+                            <!-- 接收卡片类型 -->
+                            <div>
+                                <label for="receiveCardType" class="block text-sm font-medium text-gray-700 mb-1">卡片类型 <span class="text-red-500">*</span></label>
+                                <select id="receiveCardType" name="cardType" required
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all">
+                                    <option value="">请选择类型</option>
+                                    <option value="online">在线换卡</option>
+                                    <option value="physical">线下实体卡</option>
+                                </select>
+                            </div>
+                            
+                            <div class="md:col-span-2">
+                                <label for="receiveNotes" class="block text-sm font-medium text-gray-700 mb-1">备注（可选）</label>
+                                <textarea id="receiveNotes" name="notes" rows="3"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                                    placeholder="可记录卡片收到的日期、是否带有纪念章等信息..."></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="pt-4">
+                            <button type="submit" class="w-full bg-secondary hover:bg-secondary/90 text-white font-medium py-3 px-6 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center justify-center">
+                                <i class="fa fa-check-circle mr-2"></i> 登记接收QSL卡
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 已接收卡片区域 -->
+        <section id="received" class="py-12 px-4">
+            <div class="container mx-auto">
+                <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold mb-8 text-center text-white">已接收QSL卡</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="receivedCardsContainer">
+                    <!-- 卡片将通过JavaScript动态加载 -->
+                    <div class="col-span-full text-center py-12 text-white">
+                        <i class="fa fa-circle-o-notch fa-spin text-3xl mb-4"></i>
+                        <p>加载已接收卡片中...</p>
+                        <p class="text-sm mt-2">正在从COS同步数据到服务器</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 已发送卡片区域 -->
+        <section id="sent" class="py-12 px-4">
+            <div class="container mx-auto">
+                <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-bold mb-8 text-center text-white">已发送QSL卡</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="sentCardsContainer">
+                    <!-- 卡片将通过JavaScript动态加载 -->
+                    <div class="col-span-full text-center py-12 text-white">
+                        <i class="fa fa-circle-o-notch fa-spin text-3xl mb-4"></i>
+                        <p>加载已发送卡片中...</p>
+                        <p class="text-sm mt-2">正在从COS同步数据到服务器</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚区域 -->
+    <footer class="bg-white/80 bg-blur py-8 mt-16 relative z-10">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-6 md:mb-0">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <i class="fa fa-radio text-primary text-xl"></i>
+                        <h2 class="text-lg font-bold text-primary">QSL卡管理系统</h2>
+                    </div>
+                    <p class="text-gray-600 text-sm">业余无线电爱好者的QSL卡片管理工具</p>
+                </div>
+                
+                <div class="flex flex-col items-center md:items-end">
+                    <div class="flex space-x-4 mb-4">
+                        <a href="https://www.qrz.com/db/BG7OFU" target="_blank" class="text-gray-600 hover:text-primary transition-colors" title="QRZ主页">
+                            <i class="fa fa-globe text-xl"></i>
+                        </a>
+                        <a href="mailto:bg7ofu@163.com" class="text-gray-600 hover:text-primary transition-colors" title="Email">
+                            <i class="fa fa-envelope text-xl"></i>
+                        </a>
+                        <a href="http://qsl.dcfgju.com/qrcode/wechat.jpg" target="_blank" class="text-gray-600 hover:text-primary transition-colors" title="微信二维码">
+                            <i class="fa fa-weixin text-xl"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        // 后端API基础地址
+        const API_BASE_URL = 'https://1312950286-en88iuamaj.ap-singapore.tencentscf.com';
+        let monthlyChart = null;
+        let statusChart = null;
+        let allSentCards = []; // 存储所有已发送卡片，用于筛选
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化所有事件监听
+            initEventListeners();
+            
+            // 设置默认日期为今天
+            setDefaultDates();
+            
+            // 加载数据（通过COS->后端的流程）
+            syncDataFromCosAndLoad('stats');
+            syncDataFromCosAndLoad('receivedCards');
+            syncDataFromCosAndLoad('sentCards');
+            syncDataFromCosAndLoad('chartData');
+            
+            // 检查API连接状态
+            checkApiConnection();
+        });
+        
+        // 从COS同步数据到后端并加载
+        async function syncDataFromCosAndLoad(dataType) {
+            try {
+                addDebugLog(`开始从COS同步${getDataTypeName(dataType)}数据到后端`);
+                
+                // 1. 首先从COS同步数据到后端
+                const syncResponse = await fetchWithRetry(`${API_BASE_URL}?action=syncFromCos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dataType: dataType })
+                });
+                
+                const syncResult = await syncResponse.json();
+                
+                if (syncResult.code !== 0) {
+                    addDebugLog(`从COS同步${getDataTypeName(dataType)}数据失败: ${syncResult.message}`, true);
+                    showWarning(`从COS同步数据失败，但将尝试使用本地缓存: ${syncResult.message}`);
+                } else {
+                    addDebugLog(`从COS同步${getDataTypeName(dataType)}数据成功`);
+                }
+                
+                // 2. 从后端加载数据
+                switch(dataType) {
+                    case 'stats':
+                        await loadStats();
+                        break;
+                    case 'receivedCards':
+                        await loadReceivedCards();
+                        break;
+                    case 'sentCards':
+                        await loadSentCards();
+                        break;
+                    case 'chartData':
+                        await loadChartData();
+                        break;
+                }
+                
+            } catch (error) {
+                addDebugLog(`同步并加载${getDataTypeName(dataType)}数据失败: ${error.message}`, true);
+                console.error(`同步并加载${getDataTypeName(dataType)}数据失败:`, error);
+                showError(`${getDataTypeName(dataType)}数据加载失败，请稍后重试`);
+            }
+        }
+        
+        // 获取数据类型的中文名称
+        function getDataTypeName(dataType) {
+            const names = {
+                'stats': '统计',
+                'receivedCards': '已接收卡片',
+                'sentCards': '已发送卡片',
+                'chartData': '图表'
+            };
+            return names[dataType] || dataType;
+        }
+        
+        // 保存数据到COS（先保存到后端，再由后端同步到COS）
+        async function saveDataToCos(dataType, data) {
+            try {
+                addDebugLog(`开始将${getDataTypeName(dataType)}数据保存到COS`);
+                
+                // 1. 先保存到后端
+                const saveResponse = await fetchWithRetry(`${API_BASE_URL}?action=saveToBackend`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        dataType: dataType,
+                        data: data
+                    })
+                });
+                
+                const saveResult = await saveResponse.json();
+                
+                if (saveResult.code !== 0) {
+                    addDebugLog(`保存${getDataTypeName(dataType)}数据到后端失败: ${saveResult.message}`, true);
+                    showError(`数据保存失败: ${saveResult.message}`);
+                    return false;
+                }
+                
+                // 2. 再由后端同步到COS
+                const syncResponse = await fetchWithRetry(`${API_BASE_URL}?action=syncToCos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dataType: dataType })
+                });
+                
+                const syncResult = await syncResponse.json();
+                
+                if (syncResult.code !== 0) {
+                    addDebugLog(`从后端同步${getDataTypeName(dataType)}数据到COS失败: ${syncResult.message}`, true);
+                    showWarning(`数据已保存到服务器，但同步到COS失败: ${syncResult.message}`);
+                    return true; // 服务器已保存，视为成功
+                }
+                
+                addDebugLog(`将${getDataTypeName(dataType)}数据保存到COS成功`);
+                return true;
+                
+            } catch (error) {
+                addDebugLog(`保存${getDataTypeName(dataType)}数据到COS失败: ${error.message}`, true);
+                console.error(`保存${getDataTypeName(dataType)}数据到COS失败:`, error);
+                showError(`数据保存失败，请稍后重试`);
+                return false;
+            }
+        }
+        
+        // 检查API连接状态
+        async function checkApiConnection() {
+            try {
+                addDebugLog('正在检查API连接状态...');
+                const response = await fetch(`${API_BASE_URL}?action=ping`, {
+                    method: 'GET',
+                    timeout: 5000 // 5秒超时
+                });
+                
+                if (response.ok) {
+                    addDebugLog('API连接成功');
+                } else {
+                    addDebugLog(`API连接失败，状态码: ${response.status}`, true);
+                    showWarning('API服务器可能无法访问，部分功能可能受限');
+                }
+            } catch (error) {
+                addDebugLog(`API连接测试失败: ${error.message}`, true);
+                showWarning('无法连接到API服务器，请检查网络连接或稍后再试');
+            }
+        }
+        
+        // 集中初始化所有事件监听
+        function initEventListeners() {
+            // 导航菜单切换
+            document.getElementById('menuBtn').addEventListener('click', toggleMobileMenu);
+            
+            // 筛选按钮事件
+            document.getElementById('filterAll').addEventListener('click', () => filterSentCards('all'));
+            document.getElementById('filterPending').addEventListener('click', () => filterSentCards('pending'));
+            document.getElementById('filterSent').addEventListener('click', () => filterSentCards('sent'));
+            
+            // 卡片类型选择事件
+            document.getElementById('cardType').addEventListener('change', togglePhysicalCardNotes);
+            
+            // 表单提交事件
+            document.getElementById('sendQslForm').addEventListener('submit', handleSendQslSubmit);
+            document.getElementById('receiveQslForm').addEventListener('submit', handleReceiveQslSubmit);
+            
+            // 滚动事件
+            window.addEventListener('scroll', handleScroll);
+            
+            // 调试面板事件
+            document.getElementById('toggleDebugBtn').addEventListener('click', toggleDebugPanel);
+            document.getElementById('closeDebugBtn').addEventListener('click', toggleDebugPanel);
+        }
+        
+        // 为删除按钮添加专门的事件监听
+        function setupDeleteButtonListeners() {
+            // 先移除已有的事件监听，防止重复绑定
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                // 移除所有事件监听器
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+            });
+            
+            // 重新绑定删除事件
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const cardId = this.getAttribute('data-card-id');
+                    const cardType = this.getAttribute('data-card-type');
+                    handleDeleteCard(cardId, cardType, this);
+                });
+            });
+        }
+        
+        // 为更新状态按钮添加专门的事件监听
+        function setupUpdateStatusButtonListeners() {
+            document.querySelectorAll('.update-status-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const cardId = this.getAttribute('data-card-id');
+                    handleUpdateStatus(cardId, this);
+                });
+            });
+        }
+        
+        // 移动端菜单切换
+        function toggleMobileMenu() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            mobileMenu.classList.toggle('hidden');
+        }
+        
+        // 切换调试面板显示
+        function toggleDebugPanel() {
+            const debugPanel = document.getElementById('debugPanel');
+            debugPanel.classList.toggle('active');
+        }
+        
+        // 添加调试日志
+        function addDebugLog(message, isError = false) {
+            const debugLogs = document.getElementById('debugLogs');
+            const logEntry = document.createElement('div');
+            logEntry.className = isError ? 'text-red-400' : 'text-gray-300';
+            logEntry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            debugLogs.appendChild(logEntry);
+            debugLogs.scrollTop = debugLogs.scrollHeight; // 滚动到底部
+        }
+        
+        // 设置所有表单的默认日期为今天
+        function setDefaultDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('sendDate').value = today;
+            document.getElementById('receiveDate').value = today;
+        }
+        
+        // 处理滚动事件，改变导航栏样式
+        function handleScroll() {
+            const navbar = document.getElementById('navbar');
+            if (window.scrollY > 50) {
+                navbar.classList.add('shadow-md');
+                navbar.classList.remove('shadow-sm');
+            } else {
+                navbar.classList.remove('shadow-md');
+                navbar.classList.add('shadow-sm');
+            }
+        }
+        
+        // 显示/隐藏实体卡备注
+        function togglePhysicalCardNotes() {
+            const cardType = this.value;
+            const notesContainer = document.getElementById('physicalCardNotesContainer');
+            
+            if (cardType === 'physical') {
+                notesContainer.classList.remove('hidden');
+                notesContainer.classList.add('fade-in');
+            } else {
+                notesContainer.classList.add('hidden');
+            }
+        }
+        
+        // 筛选已发送卡片
+        function filterSentCards(status) {
+            let filteredCards;
+            
+            if (status === 'all') {
+                filteredCards = allSentCards;
+            } else {
+                filteredCards = allSentCards.filter(card => card.status === status);
+            }
+            
+            renderCards(filteredCards, 'sentCardsContainer');
+        }
+        
+        // 加载统计数据
+        async function loadStats() {
+            try {
+                addDebugLog('开始从后端加载统计数据');
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getStats`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    document.getElementById('receivedCount').textContent = result.data.received || 0;
+                    document.getElementById('sentCount').textContent = result.data.sent || 0;
+                    document.getElementById('pendingCount').textContent = result.data.pending || 0;
+                    document.getElementById('onlineCount').textContent = result.data.online || 0;
+                    
+                    document.getElementById('receivedGrowth').innerHTML = result.data.receivedGrowthHtml || '<i class="fa fa-minus mr-1"></i> 0%';
+                    document.getElementById('sentGrowth').innerHTML = result.data.sentGrowthHtml || '<i class="fa fa-minus mr-1"></i> 0%';
+                    document.getElementById('pendingGrowth').innerHTML = result.data.pendingGrowthHtml || '<i class="fa fa-minus mr-1"></i> 0%';
+                    document.getElementById('onlineGrowth').innerHTML = result.data.onlineGrowthHtml || '<i class="fa fa-minus mr-1"></i> 0%';
+                    addDebugLog('统计数据加载成功');
+                } else {
+                    addDebugLog(`统计数据加载失败: ${result.message}`, true);
+                    showError('统计数据加载失败: ' + result.message);
+                }
+            } catch (error) {
+                addDebugLog(`加载统计数据失败: ${error.message}`, true);
+                console.error('加载统计数据失败:', error);
+                showError('统计数据加载失败，请稍后重试');
+            }
+        }
+        
+        // 加载图表数据
+        async function loadChartData() {
+            try {
+                addDebugLog('开始从后端加载图表数据');
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getChartData`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    drawMonthlyChart(result.data.monthly);
+                    drawStatusChart(result.data.status);
+                    addDebugLog('图表数据加载成功');
+                } else {
+                    addDebugLog(`图表数据加载失败: ${result.message}`, true);
+                    showError('图表数据加载失败: ' + result.message);
+                }
+            } catch (error) {
+                addDebugLog(`加载图表数据失败: ${error.message}`, true);
+                console.error('加载图表数据失败:', error);
+                showError('图表数据加载失败，请稍后重试');
+            }
+        }
+        
+        // 绘制月度统计图表
+        function drawMonthlyChart(data) {
+            const ctx = document.createElement('canvas');
+            document.getElementById('monthlyChartContainer').innerHTML = '';
+            document.getElementById('monthlyChartContainer').appendChild(ctx);
+            
+            monthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels || [],
+                    datasets: [
+                        {
+                            label: '已发送',
+                            data: data.sent || [],
+                            backgroundColor: '#165DFF',
+                            borderRadius: 6
+                        },
+                        {
+                            label: '待寄出',
+                            data: data.pending || [],
+                            backgroundColor: '#FFAB00',
+                            borderRadius: 6
+                        },
+                        {
+                            label: '已接收',
+                            data: data.received || [],
+                            backgroundColor: '#36CFC9',
+                            borderRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 绘制状态分布图表
+        function drawStatusChart(data) {
+            if (!data || Object.keys(data).length === 0) {
+                document.getElementById('statusChartContainer').innerHTML = 
+                    '<div class="text-center"><p>暂无状态数据</p></div>';
+                return;
+            }
+            
+            const ctx = document.createElement('canvas');
+            document.getElementById('statusChartContainer').innerHTML = '';
+            document.getElementById('statusChartContainer').appendChild(ctx);
+            
+            statusChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['已发送', '待寄出', '已接收', '在线换卡'],
+                    datasets: [{
+                        data: [
+                            data.sent || 0,
+                            data.pending || 0,
+                            data.received || 0,
+                            data.online || 0
+                        ],
+                        backgroundColor: [
+                            '#165DFF',
+                            '#FFAB00',
+                            '#36CFC9',
+                            '#722ED1'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 加载已接收卡片
+        async function loadReceivedCards() {
+            try {
+                addDebugLog('开始从后端加载已接收卡片');
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getReceivedCards`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    renderCards(result.data || [], 'receivedCardsContainer');
+                    addDebugLog(`已接收卡片加载成功，共 ${result.data?.length || 0} 条`);
+                } else {
+                    addDebugLog(`已接收卡片加载失败: ${result.message}`, true);
+                    showError('已接收卡片加载失败: ' + result.message);
+                }
+            } catch (error) {
+                addDebugLog(`加载已接收卡片失败: ${error.message}`, true);
+                console.error('加载已接收卡片失败:', error);
+                showError('已接收卡片加载失败，请稍后重试');
+            }
+        }
+        
+        // 加载已发送卡片
+        async function loadSentCards() {
+            try {
+                addDebugLog('开始从后端加载已发送卡片');
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getSentCards`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    allSentCards = result.data || [];
+                    renderCards(allSentCards, 'sentCardsContainer');
+                    addDebugLog(`已发送卡片加载成功，共 ${allSentCards.length} 条`);
+                } else {
+                    addDebugLog(`已发送卡片加载失败: ${result.message}`, true);
+                    showError('已发送卡片加载失败: ' + result.message);
+                }
+            } catch (error) {
+                addDebugLog(`加载已发送卡片失败: ${error.message}`, true);
+                console.error('加载已发送卡片失败:', error);
+                showError('已发送卡片加载失败，请稍后重试');
+            }
+        }
+        
+        // 处理发送QSL表单提交
+        async function handleSendQslSubmit(e) {
+            e.preventDefault();
+            
+            // 收集表单数据
+            const formData = {
+                callSign: document.getElementById('sendCallSign').value.trim(),
+                myCallSign: document.getElementById('sendMyCallSign').value.trim(),
+                date: document.getElementById('sendDate').value,
+                time: document.getElementById('sendTime').value,
+                frequency: document.getElementById('sendFrequency').value ? parseFloat(document.getElementById('sendFrequency').value) : null,
+                mode: document.getElementById('sendMode').value,
+                cardType: document.getElementById('cardType').value,
+                status: document.getElementById('initialStatus').value,
+                physicalCardNotes: document.getElementById('physicalCardNotes').value.trim(),
+                id: 'card_' + Date.now() + '_' + Math.floor(Math.random() * 1000), // 生成唯一ID
+                createdAt: new Date().toISOString(),
+                createdAtFormatted: new Date().toLocaleString()
+            };
+            
+            // 表单验证
+            if (!formData.callSign) {
+                showError('请输入对方呼号');
+                return;
+            }
+            
+            if (!formData.cardType) {
+                showError('请选择卡片类型');
+                return;
+            }
+            
+            try {
+                addDebugLog(`开始提交发送QSL卡: ${formData.callSign}`);
+                
+                // 显示加载状态
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa fa-circle-o-notch fa-spin mr-2"></i> 提交中...';
+                showInfo('正在保存数据并同步到COS...');
+                
+                // 1. 先获取当前所有已发送卡片
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getSentCards`);
+                const result = await response.json();
+                
+                let allCards = [];
+                if (result.code === 0) {
+                    allCards = result.data || [];
+                }
+                
+                // 2. 添加新卡片
+                allCards.push(formData);
+                
+                // 3. 保存到COS（通过后端）
+                const saveSuccess = await saveDataToCos('sentCards', allCards);
+                
+                // 恢复按钮状态
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+                
+                if (saveSuccess) {
+                    addDebugLog(`QSL卡发送信息提交并同步到COS成功: ${formData.callSign}`);
+                    showSuccess('QSL卡发送信息提交成功，并已同步到COS！');
+                    this.reset();
+                    setDefaultDates();
+                    document.getElementById('physicalCardNotesContainer').classList.add('hidden');
+                    
+                    // 重新加载相关数据
+                    syncDataFromCosAndLoad('stats');
+                    syncDataFromCosAndLoad('chartData');
+                    syncDataFromCosAndLoad('sentCards');
+                    
+                    // 滚动到已发送卡片区域
+                    document.getElementById('sent').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    addDebugLog(`发送QSL卡提交失败`, true);
+                    showError('提交失败，请稍后重试');
+                }
+            } catch (error) {
+                addDebugLog(`提交发送QSL卡失败: ${error.message}`, true);
+                console.error('提交发送QSL卡失败:', error);
+                showError('提交失败，请稍后重试');
+                
+                // 恢复按钮状态
+                const submitBtn = this.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa fa-paper-plane mr-2"></i> 提交发送QSL卡信息';
+            }
+        }
+        
+        // 处理接收QSL表单提交
+        async function handleReceiveQslSubmit(e) {
+            e.preventDefault();
+            
+            // 收集表单数据
+            const formData = {
+                callSign: document.getElementById('receiveCallSign').value.trim(),
+                myCallSign: document.getElementById('receiveMyCallSign').value.trim(),
+                date: document.getElementById('receiveDate').value,
+                time: document.getElementById('receiveTime').value,
+                frequency: document.getElementById('receiveFrequency').value ? parseFloat(document.getElementById('receiveFrequency').value) : null,
+                mode: document.getElementById('receiveMode').value,
+                cardType: document.getElementById('receiveCardType').value,
+                notes: document.getElementById('receiveNotes').value.trim(),
+                id: 'card_' + Date.now() + '_' + Math.floor(Math.random() * 1000), // 生成唯一ID
+                createdAt: new Date().toISOString(),
+                createdAtFormatted: new Date().toLocaleString()
+            };
+            
+            // 表单验证
+            if (!formData.callSign) {
+                showError('请输入对方呼号');
+                return;
+            }
+            
+            if (!formData.cardType) {
+                showError('请选择卡片类型');
+                return;
+            }
+            
+            try {
+                addDebugLog(`开始登记接收QSL卡: ${formData.callSign}`);
+                
+                // 显示加载状态
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa fa-circle-o-notch fa-spin mr-2"></i> 登记中...';
+                showInfo('正在保存数据并同步到COS...');
+                
+                // 1. 先获取当前所有已接收卡片
+                const response = await fetchWithRetry(`${API_BASE_URL}?action=getReceivedCards`);
+                const result = await response.json();
+                
+                let allCards = [];
+                if (result.code === 0) {
+                    allCards = result.data || [];
+                }
+                
+                // 2. 添加新卡片
+                allCards.push(formData);
+                
+                // 3. 保存到COS（通过后端）
+                const saveSuccess = await saveDataToCos('receivedCards', allCards);
+                
+                // 恢复按钮状态
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+                
+                if (saveSuccess) {
+                    addDebugLog(`QSL卡接收信息登记并同步到COS成功: ${formData.callSign}`);
+                    showSuccess('QSL卡接收信息登记成功，并已同步到COS！');
+                    this.reset();
+                    setDefaultDates();
+                    
+                    // 重新加载相关数据
+                    syncDataFromCosAndLoad('stats');
+                    syncDataFromCosAndLoad('chartData');
+                    syncDataFromCosAndLoad('receivedCards');
+                    
+                    // 滚动到已接收卡片区域
+                    document.getElementById('received').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    addDebugLog(`接收QSL卡登记失败`, true);
+                    showError('登记失败，请稍后重试');
+                }
+            } catch (error) {
+                addDebugLog(`提交接收QSL卡失败: ${error.message}`, true);
+                console.error('提交接收QSL卡失败:', error);
+                showError('登记失败，请稍后重试');
+                
+                // 恢复按钮状态
+                const submitBtn = this.querySelector('button[type="submit"]');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa fa-check-circle mr-2"></i> 登记接收QSL卡';
+            }
+        }
+        
+        // 渲染卡片列表
+        function renderCards(cards, containerId) {
+            const container = document.getElementById(containerId);
+            
+            if (cards.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center py-12 text-white"><p>暂无卡片数据</p></div>';
+                return;
+            }
+            
+            // 清空容器
+            container.innerHTML = '';
+            
+            // 为每张卡片创建元素
+            cards.forEach(card => {
+                // 确保card.id存在，否则生成临时ID
+                const cardId = card.id || `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                // 创建卡片元素
+                const cardEl = document.createElement('div');
+                cardEl.className = 'bg-white/90 bg-blur rounded-xl p-6 shadow-md hover-lift fade-in';
+                
+                // 确定状态标签样式
+                let statusBadge = '';
+                if (card.status === 'pending') {
+                    statusBadge = '<span class="status-badge bg-pending/10 text-pending">待寄出</span>';
+                } else if (card.status === 'sent') {
+                    statusBadge = '<span class="status-badge bg-sent/10 text-sent">已寄出</span>';
+                }
+                
+                // 确定卡片类型标签
+                let typeBadge = '';
+                if (card.cardType === 'online') {
+                    typeBadge = '<span class="status-badge bg-online/10 text-online">在线换卡</span>';
+                } else if (card.cardType === 'physical') {
+                    typeBadge = '<span class="status-badge bg-accent/10 text-accent">实体卡</span>';
+                }
+                
+                // 设置卡片内容
+                cardEl.innerHTML = `
+                    <div class="flex flex-wrap justify-between items-start gap-2 mb-4">
+                        <h3 class="text-xl font-bold">${card.callSign}</h3>
+                        <div class="flex gap-2">
+                            ${typeBadge}
+                            ${card.mode === 'EYE' ? '<span class="eye-qso-badge">EYE QSO</span>' : ''}
+                        </div>
+                    </div>
+                    <p class="text-gray-600 mb-2"><strong>我的呼号:</strong> ${card.myCallSign}</p>
+                    <p class="text-gray-600 mb-2"><strong>日期时间:</strong> ${card.date} ${card.time} UTC</p>
+                    ${card.frequency ? `<p class="text-gray-600 mb-2"><strong>频率:</strong> ${card.frequency} MHz</p>` : ''}
+                    <p class="text-gray-600 mb-2"><strong>模式:</strong> ${card.mode}</p>
+                    ${card.physicalCardNotes ? `<p class="text-gray-600 mb-2"><strong>实体卡备注:</strong> ${card.physicalCardNotes}</p>` : ''}
+                    ${card.notes ? `<p class="text-gray-600 mb-4"><strong>备注:</strong> ${card.notes}</p>` : ''}
+                    <div class="flex flex-wrap justify-between items-center gap-3 pt-3 border-t">
+                        <div class="text-sm text-gray-500">
+                            记录于 ${card.createdAtFormatted || new Date(card.createdAt).toLocaleString()}
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="delete-btn text-red-500 hover:text-red-700 transition-colors px-3 py-1 rounded border border-red-200 text-sm"
+                                title="删除" data-card-id="${cardId}" data-card-type="${containerId === 'sentCardsContainer' ? 'sent' : 'received'}">
+                                <i class="fa fa-trash mr-1"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // 添加到容器
+                container.appendChild(cardEl);
+            });
+            
+            // 为新渲染的按钮绑定事件
+            setupDeleteButtonListeners();
+            setupUpdateStatusButtonListeners();
+        }
+        
+        // 带重试机制的fetch函数
+        async function fetchWithRetry(url, options = {}, retries = 2, delay = 1000) {
+            try {
+                // 添加超时设置
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 延长超时时间，因为涉及COS操作
+                
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP错误，状态码: ${response.status}`);
+                }
+                
+                return response;
+            } catch (error) {
+                if (retries > 0 && error.name !== 'AbortError') {
+                    addDebugLog(`请求失败，将重试 ${retries} 次: ${error.message}`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries - 1, delay * 2); // 指数退避
+                }
+                throw error;
+            }
+        }
+        
+        // 处理删除卡片（新流程：从COS同步到后端 -> 后端删除 -> 同步回COS）
+        async function handleDeleteCard(cardId, cardType, button) {
+            // 确保cardId有效
+            if (!cardId) {
+                addDebugLog('卡片ID无效，无法删除', true);
+                showError('卡片ID无效，无法删除');
+                return;
+            }
+            
+            if (!confirm('确定要删除这张卡片吗？此操作不可恢复。')) {
+                return;
+            }
+            
+            try {
+                addDebugLog(`开始删除卡片，ID: ${cardId}, 类型: ${cardType}`);
+                
+                // 显示加载状态
+                button.disabled = true;
+                button.innerHTML = '<i class="fa fa-circle-o-notch fa-spin mr-1"></i> 删除中...';
+                showInfo('正在从COS同步数据...');
+                
+                // 1. 先从COS同步最新数据到后端
+                const syncResponse = await fetchWithRetry(`${API_BASE_URL}?action=syncFromCos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dataType: `${cardType}Cards` })
+                });
+                
+                const syncResult = await syncResponse.json();
+                if (syncResult.code !== 0) {
+                    addDebugLog(`删除前同步数据失败: ${syncResult.message}`, true);
+                    showWarning(`同步最新数据失败，但将继续删除操作: ${syncResult.message}`);
+                }
+                
+                // 2. 获取当前所有卡片
+                showInfo('正在处理删除...');
+                const getResponse = await fetchWithRetry(`${API_BASE_URL}?action=get${cardType.charAt(0).toUpperCase() + cardType.slice(1)}Cards`);
+                const getResult = await getResponse.json();
+                
+                if (getResult.code !== 0) {
+                    throw new Error(`获取${cardType}卡片失败: ${getResult.message}`);
+                }
+                
+                // 3. 执行删除操作
+                const updatedCards = getResult.data.filter(card => card.id !== cardId);
+                
+                // 4. 保存到后端并同步回COS
+                showInfo('正在保存更改并同步到COS...');
+                const saveSuccess = await saveDataToCos(`${cardType}Cards`, updatedCards);
+                
+                if (saveSuccess) {
+                    addDebugLog(`卡片删除成功并已同步到COS，ID: ${cardId}`);
+                    showSuccess('卡片已成功删除，并已同步到COS');
+                    
+                    // 重新加载相关数据
+                    syncDataFromCosAndLoad('stats');
+                    syncDataFromCosAndLoad('chartData');
+                    
+                    if (cardType === 'sent') {
+                        syncDataFromCosAndLoad('sentCards');
+                    } else {
+                        syncDataFromCosAndLoad('receivedCards');
+                    }
+                } else {
+                    addDebugLog(`删除卡片保存到COS失败`, true);
+                    showError('删除失败，请稍后重试');
+                    // 恢复按钮状态
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fa fa-trash mr-1"></i> 删除';
+                }
+            } catch (error) {
+                addDebugLog(`删除卡片失败: ${error.message}`, true);
+                console.error('删除卡片失败:', error);
+                
+                // 提供更具体的错误信息
+                let errorMessage = '删除失败: ';
+                if (error.name === 'AbortError') {
+                    errorMessage += '请求超时，请检查网络连接';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage += '无法连接到服务器，请检查网络或稍后重试';
+                } else {
+                    errorMessage += error.message || '请稍后重试';
+                }
+                
+                showError(errorMessage);
+                
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = '<i class="fa fa-trash mr-1"></i> 删除';
+            }
+        }
+        
+        // 处理更新卡片状态
+        async function handleUpdateStatus(cardId, button) {
+            try {
+                addDebugLog(`开始更新卡片状态，ID: ${cardId}`);
+                
+                // 显示加载状态
+                button.disabled = true;
+                button.innerHTML = '<i class="fa fa-circle-o-notch fa-spin mr-1"></i> 处理中...';
+                showInfo('正在从COS同步数据...');
+                
+                // 1. 先从COS同步最新数据到后端
+                const syncResponse = await fetchWithRetry(`${API_BASE_URL}?action=syncFromCos`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dataType: 'sentCards' })
+                });
+                
+                const syncResult = await syncResponse.json();
+                if (syncResult.code !== 0) {
+                    addDebugLog(`更新状态前同步数据失败: ${syncResult.message}`, true);
+                    showWarning(`同步最新数据失败，但将继续更新操作: ${syncResult.message}`);
+                }
+                
+                // 2. 获取当前所有已发送卡片
+                showInfo('正在更新状态...');
+                const getResponse = await fetchWithRetry(`${API_BASE_URL}?action=getSentCards`);
+                const getResult = await getResponse.json();
+                
+                if (getResult.code !== 0) {
+                    throw new Error(`获取已发送卡片失败: ${getResult.message}`);
+                }
+                
+                // 3. 更新状态
+                const updatedCards = getResult.data.map(card => {
+                    if (card.id === cardId) {
+                        return { ...card, status: 'sent' };
+                    }
+                    return card;
+                });
+                
+                // 4. 保存到后端并同步回COS
+                showInfo('正在保存更改并同步到COS...');
+                const saveSuccess = await saveDataToCos('sentCards', updatedCards);
+                
+                if (saveSuccess) {
+                    addDebugLog(`卡片状态更新成功并已同步到COS，ID: ${cardId}`);
+                    showSuccess('卡片状态已更新为已寄出，并已同步到COS');
+                    
+                    // 重新加载相关数据
+                    syncDataFromCosAndLoad('stats');
+                    syncDataFromCosAndLoad('chartData');
+                    syncDataFromCosAndLoad('sentCards');
+                } else {
+                    addDebugLog(`更新卡片状态保存到COS失败`, true);
+                    showError('更新状态失败，请稍后重试');
+                    // 恢复按钮状态
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fa fa-paper-plane mr-1"></i> 标记为已寄出';
+                }
+            } catch (error) {
+                addDebugLog(`更新卡片状态失败: ${error.message}`, true);
+                console.error('更新卡片状态失败:', error);
+                showError('更新状态失败，请稍后重试');
+                // 恢复按钮状态
+                button.disabled = false;
+                button.innerHTML = '<i class="fa fa-paper-plane mr-1"></i> 标记为已寄出';
+            }
+        }
+        
+        // 显示警告消息
+        function showWarning(message) {
+            const warningEl = document.createElement('div');
+            warningEl.className = 'fixed bottom-4 right-4 bg-yellow-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center';
+            warningEl.innerHTML = `<i class="fa fa-exclamation-triangle mr-2"></i> ${message}`;
+            
+            document.body.appendChild(warningEl);
+            
+            setTimeout(() => {
+                warningEl.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => warningEl.remove(), 300);
+            }, 8000); // 延长警告信息显示时间
+        }
+        
+        // 显示信息提示
+        function showInfo(message) {
+            const infoEl = document.createElement('div');
+            infoEl.className = 'fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center';
+            infoEl.innerHTML = `<i class="fa fa-info-circle mr-2"></i> ${message}`;
+            
+            document.body.appendChild(infoEl);
+            
+            setTimeout(() => {
+                infoEl.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => infoEl.remove(), 300);
+            }, 3000);
+        }
+        
+        // 显示错误消息
+        function showError(message) {
+            const errorEl = document.createElement('div');
+            errorEl.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center';
+            errorEl.innerHTML = `<i class="fa fa-exclamation-circle mr-2"></i> ${message}`;
+            
+            document.body.appendChild(errorEl);
+            
+            setTimeout(() => {
+                errorEl.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => errorEl.remove(), 5000); // 延长错误信息显示时间
+            }, 5000);
+        }
+        
+        // 显示成功消息
+        function showSuccess(message) {
+            const successEl = document.createElement('div');
+            successEl.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center';
+            successEl.innerHTML = `<i class="fa fa-check-circle mr-2"></i> ${message}`;
+            
+            document.body.appendChild(successEl);
+            
+            setTimeout(() => {
+                successEl.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => successEl.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+    
